@@ -1,17 +1,11 @@
 //SPDX-License-Identifier: MIT
-pragma solidity >=0.6.0 <0.8.1;
+pragma solidity ^0.8.0;
 
-/**
- * @title Tech Insurance tor
- * @dev 
- * Step1: Complete the functions in the insurance smart contract
- * Step2:Add any required methods that are needed to check if the function are called correctly, 
- * and also add a modifier function that allows only the owner can run the changePrice function.
- * Step3: Add any error handling that may occur in any function
- * Step 4: add ERC 721 Token
- * 
- */
-contract TechInsurance {
+ 
+import "../github/OpenZeppelin/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
+contract TechInsurance is ERC721 {
+
+  
     /** 
      * Defined two structs
      * 
@@ -40,13 +34,13 @@ contract TechInsurance {
     uint productCounter;
     
     address payable insOwner;
-    constructor(address payable _insOwner) public{
-        insOwner = _insOwner;
-    }
+    constructor(address payable _insOwner) public ERC721("Elite", "code"){
+      insOwner = _insOwner;
+   }
  
     function addProduct(uint _productId, string memory _productName, uint _price ) public {
+        productCounter++;
         Product memory newProduct =Product(_productId, _productName, _price, true);
-        insOwner = msg.sender;
         productIndex[productCounter++] = newProduct;
        
         
@@ -54,13 +48,13 @@ contract TechInsurance {
     }
     
     
-    function changeFalse(uint _productIndex) public returns(bool) {
+    function doNotOffer(uint _productIndex) public returns(bool) {
         require(msg.sender == insOwner, "I'm not offer it");
         return productIndex[_productIndex].offered == false;
 
     }
     
-    function changeTrue(uint _productIndex) public returns(bool) {
+    function forOffer(uint _productIndex) public returns(bool) {
         require(msg.sender == insOwner, "I'm offer it");
         return productIndex[_productIndex].offered ==true;
 
@@ -89,4 +83,9 @@ contract TechInsurance {
         
         }
         
+     function buyInsurance(uint _productIndex) public payable {
+        
     } 
+        
+    } 
+    
