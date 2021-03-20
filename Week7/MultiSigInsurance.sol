@@ -1,6 +1,10 @@
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.7.0;
+
+
 contract Insurance {
     
-//###########################################################################
+
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
     event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
 
