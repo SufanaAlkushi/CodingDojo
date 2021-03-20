@@ -1,60 +1,34 @@
-//SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
-
-
 contract Insurance {
     
-
+//###########################################################################
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-
-    /**
-     * @dev Emitted when `owner` enables `approved` to manage the `tokenId` token.
-     */
     event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
-   address private contractOwner;
-    uint M = 2;
-    address [] public authenticators ;
-    address [] public vAuth;
-    // Mapping from token ID to owner address
+
     mapping (uint256 => address) private _owners;
-
-    // Mapping owner address to token count
     mapping (address => uint256) private _balances;
-    // Mapping from token ID to approved address
     mapping (uint256 => address) private _tokenApprovals;
-    mapping (uint256 => uint256) public _verifyAuth;
-    mapping (address => bool) public isAuther;
-    mapping (uint => mapping (address => bool)) public confirmations;
-    
-    
-        constructor() public {
-        contractOwner = msg.sender;
-        // authenticators.push(msg.sender);
-        isAuther[msg.sender] = false;
-    }
- 
 
-    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal virtual { }
+    function beforeTokenTransfer(address from, address to, uint256 tokenId) internal virtual { }
 
-    function _approve(address to, uint256 tokenId) internal virtual {
+    function approve(address to, uint256 tokenId) internal virtual {
         _tokenApprovals[tokenId] = to;
         emit Approval(ownerOf(tokenId), to, tokenId);
     }
     
-        function ownerOf(uint256 tokenId) public view virtual  returns (address) {
+    function ownerOf(uint256 tokenId) public view virtual  returns (address) {
         address owner = _owners[tokenId];
         require(owner != address(0), "ERC721: owner query for nonexistent token");
         return owner;
     }
     
-    function _transfer(address from, address to, uint256 tokenId) internal virtual {
+    function transfer(address from, address to, uint256 tokenId) internal virtual {
         require(ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
         require(to != address(0), "ERC721: transfer to the zero address");
 
-        _beforeTokenTransfer(from, to, tokenId);
+        beforeTokenTransfer(from, to, tokenId);
 
         // Clear approvals from the previous owner
-        _approve(address(0), tokenId);
+        approve(address(0), tokenId);
 
         _balances[from] -= 1;
         _balances[to] += 1;
@@ -63,11 +37,11 @@ contract Insurance {
         emit Transfer(from, to, tokenId);
     }
     
-        function _mint(address to, uint256 tokenId) internal virtual {
+    function mint(address to, uint256 tokenId) internal virtual {
         require(to != address(0), "ERC721: mint to the zero address");
-        require(!_exists(tokenId), "ERC721: token already minted");
+        require(!exists(tokenId), "ERC721: token already minted");
 
-        _beforeTokenTransfer(address(0), to, tokenId);
+        beforeTokenTransfer(address(0), to, tokenId);
 
         _balances[to] += 1;
         _owners[tokenId] = to;
@@ -75,152 +49,174 @@ contract Insurance {
         emit Transfer(address(0), to, tokenId);
     }
     
-        function _exists(uint256 tokenId) internal view virtual returns (bool) {
+    function exists(uint256 tokenId) internal view virtual returns (bool) {
         return _owners[tokenId] != address(0);
     }
+//###########################################################################
+//---------------------------------------------------------------------------
+    //insOwner
+    address payable insOwner;
     
+    constructor() public {
+        insOwner = msg.sender;
+        addAuth(insOwner);
+    }
+    modifier onlyiOwner {
+        require(msg.sender == insOwner, "You are not authorized!");
+        _;
+    }
+    
+    uint M = 2;
+    uint N = 2; // plus the Owner;
+    uint uTX = 0;
+    
+    //Auths
+    mapping (address => authenticator) private Authenticators ;
+    address[] auths;
+    struct authenticator{
+        address authAddress; 
+        bool authorized;
+    }
+    
+    modifier onlyAuthorized {
+        require(Authenticators[msg.sender].authorized == true, "You are not authorized!");
+        _;
+    }
+
+    
+    //Tx
+    
+    mapping (uint => transaction) private TX ;
+    
+    struct transaction{
+        uint id;
+        //status
+        //confs{type:#n}
+        uint confirmations;
+        bool processed;
+    }
+    
+    //verified
+    mapping(uint => mapping(address => bool)) verfiedTX; 
+//---------------------------------------------------------------------------
+    //Product + Client
     struct Product {
         uint productId;
         string productName;
         uint price;
         bool offered;
     }
-     
+    
     struct Client {
         bool isValid;
         uint time;
     }
     
-     modifier OnlyinsOwner(uint _prodID) {
-         require(msg.sender == ownerOf(_prodID));
+    modifier prodOwner(uint _prodID) {
+         require(msg.sender == ownerOf(_prodID),"You don not own this product");
          _;
     }
-         modifier TimeCheck {
-         require(block.timestamp <= timeLocked + 15 minutes );
-         _;
-     }
+    
+    modifier validClient(address _address, uint _id){
+        require(client[_address][_id].isValid == true,"you already have done a refund");
+        _;
+    }
+    
+    modifier Timecheck(address _address, uint _id) {
+        require(block.timestamp < client[_address][_id].time + 7 days, "you cannot get a refund after 7 days of purchasing the item.");
+        _;
+    }
+    
+    modifier getUTX{
+        require(uTX !=0, "There is no transaction you must verify!");
+        _;
+    }
+    modifier checkVerifications(address _address, uint _id){
+        require (TX[_id].id != 0, "This product is not exist");
+        require (TX[_id].processed != true, "This product is already verified");
+        require (verfiedTX[_id][_address] != true, "you already verified this transaction");
+        _;
+    }
     
     mapping(uint => Product) public productIndex;
     mapping(address => mapping(uint => Client)) public client;
     uint256 timeLocked = block.timestamp;
-    uint productCounter;
-    uint public verifyCount = 0;
+    uint productCounter=0;
     
-     //address payable insOwner;
-    // constructor(address payable _insOwner) public{
-    //     insOwner = _insOwner;
-    // }
- 
-    function addProduct(uint _productId, string memory _productName, uint _price) public  {
-        // make the contract owner who add products
+    
+    function addProduct(uint _productId, string memory _productName, uint _price) public onlyiOwner {
+        // make the contract owner who add products + product is not exist not = 0
        productCounter++;
-       
        productIndex[productCounter]= Product(_productId, _productName, _price, false);
-       _verifyAuth[productCounter]= 0; // newwww
+       TX[productCounter] = transaction(productCounter, 0, false);
+       // Tx needed to be verified ++ 
+       uTX++;
 
-       // this step need to be verified by MultiSig ->> accept or reject
-       //_mint(prodOwner, productCounter);
     }
     
     
-    function doNotOffer(uint _productIndex) public OnlyinsOwner(_productIndex) {
-
+    function doNotOffer(uint _productIndex) public prodOwner(_productIndex) {
         productIndex[_productIndex].offered = false;
     }
     
-    function forOffer(uint _productIndex) public OnlyinsOwner(_productIndex) {
-        
+    function forOffer(uint _productIndex) public onlyiOwner {
         productIndex[_productIndex].offered = true;
     }
     
-    function changePrice(uint _productIndex, uint _price) public OnlyinsOwner(_productIndex) {
-
+    function changePrice(uint _productIndex, uint _price) public onlyiOwner {
         productIndex[_productIndex].price = _price;
-        
     }
     
-
-      function fetch(uint _productIndex)public view returns(uint productId,string memory productName,uint price, bool offere ,address owner){
-        productId =productIndex[_productIndex].productId;
-        productName =productIndex[_productIndex].productName;
-        price = productIndex[_productIndex].price;
-        offere = productIndex[_productIndex].offered;
-        owner = ownerOf(_productIndex);
-        
-    }
-
-
-    function getBalance(address _address) public view returns(uint256 balance){
-     balance = address(_address).balance;
-        
-    }
-    
-    function buyInsurance(uint _productIndex) public payable TimeCheck {
+    function buyInsurance(uint _productIndex) public payable  {
         require(productIndex[_productIndex].offered == true, "This item is sold out!");
         require(msg.value <= productIndex[_productIndex].price, "You don't have enough tokens!");       
-        Client(true, block.timestamp);
-        //buyer =  msg.sender;
-        _transfer(ownerOf(_productIndex), msg.sender,_productIndex);   
+        
+        transfer(ownerOf(_productIndex), msg.sender,_productIndex);
+        client[msg.sender][_productIndex] = Client(true, block.timestamp); // save payment details
         doNotOffer(_productIndex);   
-    }
+    } 
     
-    modifier onlyContractOwner() {
-      require(msg.sender == contractOwner, "Not contract owner");
-        _;
-    }
-    
-    modifier notNull() {
-    require(msg.sender != address(0));
-        _;
-    }
-    
-     modifier AuthenticatorExist(address _address){
-        require(isAuther[_address] == false, "already added!");
-        _;
-  }
-    
-     function getAuths() public view returns (address[] memory)
-    {
-        return authenticators;
-    }
-    
-    function addAuths(address _address) public onlyContractOwner() 
-    AuthenticatorExist(_address) notNull() {
-        isAuther[_address] = true;
-        Authrize(_address);
-    }
 
-    function Authrize(address _add) private returns (uint _x) {
-        require(isAuther [msg.sender] == true, "no you can't");
-        authenticators.push(_add);
-        return (authenticators.length);
+    function refund(uint _id) public prodOwner(_id) Timecheck(msg.sender, _id) validClient(msg.sender, _id) {
+
+        transfer(msg.sender, insOwner, _id);
+        client[msg.sender][_id].isValid = false;
     }
+//--------------------------------------------------------------------------- 
 
-
-    function verify(uint _id) public{
-        require(isAuther [msg.sender] == true, "You are not authrize");
+    function verifyTX (uint _id) public onlyAuthorized getUTX checkVerifications(msg.sender, _id){
+        TX[_id].confirmations = TX[_id].confirmations +1;
+        verfiedTX[_id][msg.sender] = true ;
         
-      //  _verifyAuth[_id]++;
-      //     mapping (uint => mapping (address => bool) ) public confirmations;
-      confirmations[_id][msg.sender]=true;
-      //verifyCount++;
-        if (verifyCount == M) {
-            confirm(_id);
-        }
-    }
-    
-    function confirm(uint _id) private {
-        _mint(contractOwner, _id);
-        forOffer(_id);
-        verifyCount =0;
-    }
-    
-    function sigAddress(uint _id) public view returns(bool adds, uint n){
-        
-        adds = confirmations[_id][msg.sender];
-        n = verifyCount;
-    }
-    
-    // contractOwner
+        if  (TX[_id].confirmations == M){
+            proceedTX(_id);
+            }
 
-}    
+    }
+    
+    function proceedTX(uint _id) private onlyAuthorized{
+        // mint
+        productIndex[_id].offered = true;
+        TX[_id].processed = true;
+        mint(insOwner, _id);
+        uTX--;
+    }
+    
+    function addAuth (address _address) public onlyiOwner {
+        require(Authenticators[_address].authAddress == address(0), "This address is already exist");
+        require(auths.length < N + 1,"You cannot add more authorizers");
+         Authenticators[_address]= authenticator(_address, true);
+         auths.push(_address);
+    }
+    
+    function modifyAuth(address _address, bool auth) public onlyiOwner{
+        require(Authenticators[_address].authAddress != address(0));
+        Authenticators[_address].authorized= auth;
+        
+    }
+
+    function unconfirmedTX() public onlyAuthorized view returns(uint unconfirmedTx) {
+        return uTX;
+    }
+    
+}
